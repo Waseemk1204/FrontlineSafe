@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "prisma generate && node node_modules/@nestjs/cli/bin/nest.js build",
-    "build:prod": "prisma generate && node node_modules/@nestjs/cli/bin/nest.js build",
+    "build": "prisma generate && nest build",
+    "build:prod": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -53,10 +53,10 @@
     "passport-jwt": "^4.0.1",
     "stripe": "^19.3.0",
     "uuid": "^13.0.0",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "@nestjs/cli": "^11.0.10"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.10",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.5",
