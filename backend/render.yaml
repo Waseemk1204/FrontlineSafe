@@ -3,7 +3,7 @@ services:
     name: frontlinesafe-backend
     env: node
     rootDir: backend
-    buildCommand: npm install && npm run prisma:generate && npx nest build
+    buildCommand: npm install && npm run prisma:generate && npm run build
     startCommand: npm run start:prod
     envVars:
       - key: NODE_ENV

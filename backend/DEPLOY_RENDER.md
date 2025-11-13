@@ -21,7 +21,7 @@
 
 **Build & Deploy:**
 - **Runtime**: `Node`
-- **Build Command**: `npm install && npm run prisma:generate && npx nest build`
+- **Build Command**: `npm install && npm run prisma:generate && npm run build`
 - **Start Command**: `npm run start:prod` ⚠️ **THIS IS WHAT YOU NEED**
 
 **Environment:**
@@ -86,7 +86,7 @@ Your API endpoints:
 | Setting | Value |
 |---------|-------|
 | **Root Directory** | `backend` |
-| **Build Command** | `npm install && npm run prisma:generate && npx nest build` |
+| **Build Command** | `npm install && npm run prisma:generate && npm run build` |
 | **Start Command** | `npm run start:prod` ⭐ |
 | **Environment** | `Node` |
 
