@@ -9,28 +9,50 @@ export class RateLimitGuard implements CanActivate {
   private max: number;
 
   constructor(private readonly configService: ConfigService) {
-    const redisConfig = this.configService.get('redis');
-    this.redis = new Redis(redisConfig.url);
+    try {
+      const redisConfig = this.configService.get('redis');
+      if (redisConfig?.url) {
+        this.redis = new Redis(redisConfig.url, {
+          lazyConnect: true,
+          enableReadyCheck: false,
+          maxRetriesPerRequest: 1,
+          retryStrategy: () => null,
+        });
+      }
+    } catch (error) {
+      console.warn('RateLimitGuard: Redis initialization failed, rate limiting disabled:', error.message);
+    }
     this.ttl = parseInt(process.env.RATE_LIMIT_TTL || '60', 10);
     this.max = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const key = request.user?.id || request.ip || 'anonymous';
-    const redisKey = `rate_limit:${key}`;
-
-    const current = await this.redis.incr(redisKey);
-    
-    if (current === 1) {
-      await this.redis.expire(redisKey, this.ttl);
+    // If Redis is not available, allow the request (fail open)
+    if (!this.redis) {
+      return true;
     }
 
-    if (current > this.max) {
-      return false;
-    }
+    try {
+      const request = context.switchToHttp().getRequest();
+      const key = request.user?.id || request.ip || 'anonymous';
+      const redisKey = `rate_limit:${key}`;
 
-    return true;
+      const current = await this.redis.incr(redisKey);
+      
+      if (current === 1) {
+        await this.redis.expire(redisKey, this.ttl);
+      }
+
+      if (current > this.max) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      // If Redis fails, allow the request (fail open)
+      console.warn('RateLimitGuard: Redis error, allowing request:', error.message);
+      return true;
+    }
   }
 }
 
