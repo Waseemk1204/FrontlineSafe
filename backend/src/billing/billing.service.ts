@@ -6,17 +6,27 @@ import { SubscriptionPlan } from '@prisma/client';
 
 @Injectable()
 export class BillingService {
-  private stripe: Stripe;
+  private stripe: Stripe | null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
   ) {
     const stripeConfig = this.configService.get('stripe');
-    this.stripe = new Stripe(stripeConfig.secretKey);
+    // Only initialize Stripe if secret key is provided
+    if (stripeConfig?.secretKey) {
+      this.stripe = new Stripe(stripeConfig.secretKey);
+    } else {
+      console.warn('Stripe secret key not provided. Billing features will be disabled.');
+      this.stripe = null;
+    }
   }
 
   async createCustomer(companyId: string, email: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
+    }
+
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });
@@ -45,6 +55,10 @@ export class BillingService {
   }
 
   async createSubscription(companyId: string, planId: string, paymentMethodId: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
+    }
+
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
     });
@@ -118,6 +132,10 @@ export class BillingService {
   }
 
   async handleWebhook(event: Stripe.Event) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
+    }
+
     switch (event.type) {
       case 'invoice.paid':
         await this.handleInvoicePaid(event.data.object as Stripe.Invoice);

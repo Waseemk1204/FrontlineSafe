@@ -32,7 +32,7 @@ class CreateSubscriptionDto {
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class BillingController {
-  private stripe: Stripe;
+  private stripe: Stripe | null;
 
   constructor(
     private readonly billingService: BillingService,
@@ -40,7 +40,13 @@ export class BillingController {
     @InjectQueue('notifications') private readonly notificationsQueue: Queue,
   ) {
     const stripeConfig = this.configService.get('stripe');
-    this.stripe = new Stripe(stripeConfig.secretKey);
+    // Only initialize Stripe if secret key is provided
+    if (stripeConfig?.secretKey) {
+      this.stripe = new Stripe(stripeConfig.secretKey);
+    } else {
+      console.warn('Stripe secret key not provided in BillingController. Billing features will be disabled.');
+      this.stripe = null;
+    }
   }
 
   @Post('create-customer')
@@ -66,6 +72,10 @@ export class BillingController {
     @Req() req: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature: string,
   ) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not configured. Please set STRIPE_SECRET_KEY.');
+    }
+
     const stripeConfig = this.configService.get('stripe');
     const webhookSecret = stripeConfig.webhookSecret;
 
