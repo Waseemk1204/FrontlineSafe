@@ -20,10 +20,12 @@ export class HealthService {
           retryStrategy: () => null, // Don't retry on connection failure
           maxRetriesPerRequest: 1,
           lazyConnect: true,
+          connectTimeout: 5000,
+          enableOfflineQueue: false,
         });
       }
     } catch (error) {
-      console.warn('Redis initialization failed:', error.message);
+      console.warn('Redis initialization failed (non-critical):', error.message);
     }
 
     try {

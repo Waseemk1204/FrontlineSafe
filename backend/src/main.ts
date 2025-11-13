@@ -10,9 +10,10 @@ import { LoggerService } from './common/logger/logger.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
-  });
+  try {
+    const app = await NestFactory.create(AppModule, {
+      logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    });
 
   const configService = app.get(ConfigService);
   const logger = app.get(LoggerService);
@@ -65,10 +66,17 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = appConfig.port;
+  const port = appConfig.port || process.env.PORT || 3000;
   await app.listen(port);
-  logger.log(`Application is running on: http://localhost:${port}/${appConfig.apiPrefix}`);
-  logger.log(`Swagger documentation: http://localhost:${port}/${appConfig.apiPrefix}/docs`);
+  logger.log(`Application is running on: http://0.0.0.0:${port}/${appConfig.apiPrefix}`);
+  logger.log(`Swagger documentation: http://0.0.0.0:${port}/${appConfig.apiPrefix}/docs`);
+  } catch (error) {
+    console.error('Failed to start application:', error);
+    process.exit(1);
+  }
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('Bootstrap failed:', error);
+  process.exit(1);
+});
