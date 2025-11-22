@@ -1,0 +1,349 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  WORKER
+  SUPERVISOR
+  MANAGER
+  ADMIN
+}
+
+enum IncidentType {
+  injury
+  near_miss
+  hazard
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+}
+
+enum IncidentStatus {
+  new
+  investigating
+  closed
+}
+
+enum CapaStatus {
+  Open
+  In_Progress
+  Under_Review
+  Closed
+}
+
+enum CapaPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum SubscriptionPlan {
+  Starter
+  Growth
+  Enterprise
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+  past_due
+  trialing
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  plan      SubscriptionPlan @default(Starter)
+  stripeCustomerId String? @unique
+  stripeSubscriptionId String? @unique
+  subscriptionStatus SubscriptionStatus @default(trialing)
+  trialEndsAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sites     Site[]
+  users     User[]
+  incidents Incident[]
+  inspections Inspection[]
+  capas     Capa[]
+  documents Document[]
+  subscriptions Subscription[]
+  auditLogs AuditLog[]
+
+  @@index([createdAt])
+}
+
+model Site {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  address   String?
+  coordsLat Float?
+  coordsLng Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  incidents  Incident[]
+  inspections Inspection[]
+
+  @@index([companyId])
+  @@index([companyId, createdAt])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  email     String
+  password  String?  // hashed; nullable for invited users not yet set
+  role      UserRole @default(WORKER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  refreshTokens   RefreshToken[]
+  createdIncidents Incident[]     @relation("Reporter")
+  assignedCapas   Capa[]          @relation("Owner")
+  createdCapas    Capa[]          @relation("Creator")
+  capaComments    CapaComment[]
+  uploadedDocuments Document[]
+  auditLogs      AuditLog[]
+
+  @@unique([email])
+  @@index([companyId])
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Invite {
+  id        String   @id @default(uuid())
+  companyId String
+  email     String
+  token     String   @unique
+  role      UserRole
+  invitedBy String
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, email])
+  @@index([token])
+  @@index([email])
+}
+
+model Incident {
+  id              String          @id @default(uuid())
+  companyId       String
+  siteId          String
+  reporterId      String?
+  reporterName    String?
+  type            IncidentType
+  severity        IncidentSeverity
+  description     String          @db.Text
+  coordsLat       Float?
+  coordsLng       Float?
+  photos          Json?           // array of URLs/keys
+  clientTempId    String?
+  status          IncidentStatus  @default(new)
+  syncedFromClientId String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  reporter User?  @relation("Reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, clientTempId])
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+  @@index([siteId])
+  @@index([reporterId])
+}
+
+model InspectionTemplate {
+  id          String   @id @default(uuid())
+  companyId   String?
+  name        String
+  description String?  @db.Text
+  schema      Json     // JSON schema for checklist items
+  isGlobal    Boolean  @default(false) // true for system-wide templates
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inspections Inspection[]
+
+  @@index([companyId])
+  @@index([isGlobal])
+}
+
+model Inspection {
+  id          String   @id @default(uuid())
+  companyId   String
+  siteId      String
+  templateId  String
+  inspectorId String
+  inspectorName String?
+  responses   Json     // array of item results
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  site     Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  template InspectionTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([companyId, createdAt])
+  @@index([siteId])
+  @@index([templateId])
+}
+
+model Capa {
+  id          String      @id @default(uuid())
+  companyId   String
+  originType  String      // "incident" | "inspection"
+  originId    String
+  title       String
+  description String      @db.Text
+  ownerId     String
+  creatorId   String
+  status      CapaStatus  @default(Open)
+  priority    CapaPriority?
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  owner    User          @relation("Owner", fields: [ownerId], references: [id], onDelete: Restrict)
+  creator  User          @relation("Creator", fields: [creatorId], references: [id], onDelete: Restrict)
+  comments CapaComment[]
+  attachments CapaAttachment[]
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([companyId, ownerId])
+  @@index([dueDate])
+  @@index([originType, originId])
+}
+
+model CapaComment {
+  id        String   @id @default(uuid())
+  capaId    String
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  capa Capa @relation(fields: [capaId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([capaId])
+  @@index([capaId, createdAt])
+}
+
+model CapaAttachment {
+  id        String   @id @default(uuid())
+  capaId    String
+  fileUrl   String
+  fileName  String
+  fileSize  Int?
+  mimeType  String?
+  uploadedBy String
+  createdAt DateTime @default(now())
+
+  capa Capa @relation(fields: [capaId], references: [id], onDelete: Cascade)
+
+  @@index([capaId])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  companyId   String
+  title       String
+  version     Int      @default(1)
+  fileUrl     String
+  fileName    String
+  fileSize    Int?
+  mimeType    String?
+  tags        String[] @default([])
+  uploadedBy  String
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  uploader User    @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, title, version])
+  @@index([companyId])
+  @@index([companyId, title])
+  @@index([uploadedBy])
+}
+
+model Subscription {
+  id                    String             @id @default(uuid())
+  companyId             String
+  stripeSubscriptionId  String             @unique
+  plan                  SubscriptionPlan
+  status                SubscriptionStatus
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean            @default(false)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([stripeSubscriptionId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String?
+  action    String
+  entityType String? // "incident", "capa", "user", etc.
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([companyId, createdAt])
+  @@index([userId])
+  @@index([entityType, entityId])
+}
+
